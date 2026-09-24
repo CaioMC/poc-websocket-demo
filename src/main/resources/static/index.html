@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>POC — Chat com streaming de raciocínio (Spring AI + Ollama)</title>
+<style>
+    body { font-family: system-ui, sans-serif; max-width: 780px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.2rem; }
+    fieldset { margin-bottom: 16px; }
+    label { display: block; margin: 6px 0 2px; font-size: 0.85rem; color: #444; }
+    input[type=text] { width: 100%; padding: 6px; box-sizing: border-box; }
+    button { padding: 6px 12px; margin-top: 6px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: 0.5; }
+    #log { border: 1px solid #ccc; padding: 10px; height: 380px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; background: #fafafa; white-space: pre-wrap; }
+    .status { font-weight: bold; }
+    .msg-USER { color: #06c; }
+    .msg-CONTEXT { color: #a60; }
+    .msg-ASSISTANT { color: #090; }
+    .msg-SYSTEM, .evt-INFO { color: #999; }
+    .evt-ERROR { color: #c00; font-weight: bold; }
+    .evt-STATUS { color: #666; font-style: italic; }
+    .chunk { color: #333; }
+</style>
+</head>
+<body>
+<h1>POC — Chat com streaming de raciocínio (Spring AI + Ollama)</h1>
+<p>Backend: Spring Boot + <code>TextWebSocketHandler</code> (sem STOMP) + Spring AI/Ollama para o
+   raciocínio real do modelo, em streaming. Veja <code>docs/architecture.md</code> e
+   <code>docs/sequence-diagram.md</code> no repositório.</p>
+
+<fieldset>
+    <legend>1) Conexão</legend>
+    <label for="conversationId">ID da conversa (use o mesmo valor para testar reconexão)</label>
+    <input id="conversationId" type="text" value="conversa-1">
+    <button id="connectBtn">Conectar</button>
+    <button id="disconnectBtn">Desconectar (simular fechar a aba)</button>
+    <button id="resetBtn">Reiniciar estado desta conversa no servidor</button>
+    <p>Status da conexão: <span id="wsStatus" class="status">desconectado</span> |
+       Status da conversa: <span id="chatStatus" class="status">-</span></p>
+</fieldset>
+
+<fieldset>
+    <legend>2) Enviar mensagem (inicia o raciocínio do modelo)</legend>
+    <label for="message">Mensagem do usuário</label>
+    <input id="message" type="text" value="Quero saber o status do meu pedido">
+    <button id="sendBtn">Enviar mensagem</button>
+</fieldset>
+
+<fieldset>
+    <legend>3) Adicionar mais contexto/objetivo pela MESMA conexão</legend>
+    <label for="context">Contexto adicional (ex.: número do pedido pedido pelo agente)</label>
+    <input id="context" type="text" value="12345">
+    <button id="contextBtn">Enviar contexto</button>
+</fieldset>
+
+<h3>Eventos recebidos</h3>
+<div id="log"></div>
+
+<script>
+    const logEl = document.getElementById('log');
+    const wsStatusEl = document.getElementById('wsStatus');
+    const chatStatusEl = document.getElementById('chatStatus');
+    let socket = null;
+    let currentAssistantLine = null;
+
+    function log(text, cssClass) {
+        const line = document.createElement('div');
+        if (cssClass) line.className = cssClass;
+        line.textContent = text;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+        return line;
+    }
+
+    function connect() {
+        const conversationId = document.getElementById('conversationId').value.trim() || 'default';
+        // Porta fixa do backend (server.port em application.yaml); não usar location.port
+        // (pode divergir se a página for aberta via preview de IDE).
+        const backendPort = 3000;
+        const wsUrl = `ws://${location.hostname}:${backendPort}/ws/chat?conversationId=${encodeURIComponent(conversationId)}`;
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            wsStatusEl.textContent = `conectado (${conversationId})`;
+            log(`--- conectado à conversa "${conversationId}" ---`, 'evt-INFO');
+        };
+
+        socket.onclose = () => {
+            wsStatusEl.textContent = 'desconectado';
+            log('--- conexão encerrada ---', 'evt-INFO');
+        };
+
+        socket.onerror = () => {
+            log('--- erro na conexão ---', 'evt-ERROR');
+        };
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleEvent(data);
+        };
+    }
+
+    function handleEvent(data) {
+        switch (data.type) {
+            case 'replay':
+                chatStatusEl.textContent = data.status;
+                log(`--- histórico recebido (status atual: ${data.status}, ${data.messages.length} mensagem(ns)) ---`, 'evt-INFO');
+                data.messages.forEach((m) => log(`[${m.role}] ${m.content}`, 'msg-' + m.role));
+                break;
+
+            case 'message_appended':
+                // Evita duplicar no log a mensagem que o próprio usuário acabou de digitar
+                // (ela já foi mostrada de forma otimista em sendMessage/sendContext).
+                if (data.message.role === 'ASSISTANT') {
+                    log(`[ASSISTANT] ${data.message.content}`, 'msg-ASSISTANT');
+                }
+                break;
+
+            case 'status_changed':
+                chatStatusEl.textContent = data.status;
+                log(`--- status: ${data.status} ---`, 'evt-STATUS');
+                if (data.status === 'PROCESSING') {
+                    currentAssistantLine = log('[ASSISTANT] ', 'chunk');
+                }
+                break;
+
+            case 'reasoning_chunk':
+                if (!currentAssistantLine) {
+                    currentAssistantLine = log('[ASSISTANT] ', 'chunk');
+                }
+                currentAssistantLine.textContent += data.content;
+                logEl.scrollTop = logEl.scrollHeight;
+                break;
+
+            case 'reasoning_completed':
+                currentAssistantLine = null;
+                break;
+
+            case 'error':
+                log(`--- erro: ${data.errorMessage} ---`, 'evt-ERROR');
+                break;
+
+            default:
+                log(`--- evento desconhecido: ${JSON.stringify(data)} ---`, 'evt-INFO');
+        }
+    }
+
+    function send(payload) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            log('--- não conectado; clique em "Conectar" primeiro ---', 'evt-ERROR');
+            return;
+        }
+        socket.send(JSON.stringify(payload));
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', connect);
+
+    document.getElementById('disconnectBtn').addEventListener('click', () => {
+        if (socket) socket.close();
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        send({ type: 'reset' });
+        logEl.textContent = '';
+        chatStatusEl.textContent = '-';
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+        const message = document.getElementById('message').value.trim();
+        if (!message) return;
+        log(`[USER] ${message}`, 'msg-USER');
+        send({ type: 'user_message', content: message });
+    });
+
+    document.getElementById('contextBtn').addEventListener('click', () => {
+        const context = document.getElementById('context').value.trim();
+        if (!context) return;
+        log(`[CONTEXT] ${context}`, 'msg-CONTEXT');
+        send({ type: 'context', content: context });
+    });
+</script>
+</body>
+</html>
