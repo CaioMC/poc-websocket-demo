@@ -22,6 +22,8 @@ import com.example.wschat.core.chat.usecase.ConnectToChatUseCase;
 import com.example.wschat.core.chat.usecase.InterruptReasoningUseCase;
 import com.example.wschat.core.chat.usecase.ResetChatUseCase;
 import com.example.wschat.core.chat.usecase.SendUserMessageUseCase;
+import com.example.wschat.core.codingtask.usecase.ListCodingTasksUseCase;
+import com.example.wschat.core.codingtask.usecase.StartCodingTaskUseCase;
 
 /**
  * Adapter fino de WebSocket (sem STOMP): ciclo de vida da conexão e tradução
@@ -42,6 +44,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final AddContextUseCase addContextUseCase;
     private final InterruptReasoningUseCase interruptReasoningUseCase;
     private final ResetChatUseCase resetChatUseCase;
+    private final StartCodingTaskUseCase startCodingTaskUseCase;
+    private final ListCodingTasksUseCase listCodingTasksUseCase;
     private final ObjectMapper objectMapper;
 
     public ChatWebSocketHandler(
@@ -52,6 +56,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         AddContextUseCase addContextUseCase,
         InterruptReasoningUseCase interruptReasoningUseCase,
         ResetChatUseCase resetChatUseCase,
+        StartCodingTaskUseCase startCodingTaskUseCase,
+        ListCodingTasksUseCase listCodingTasksUseCase,
         ObjectMapper objectMapper
     ) {
         this.sessionRegistry = sessionRegistry;
@@ -61,6 +67,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         this.addContextUseCase = addContextUseCase;
         this.interruptReasoningUseCase = interruptReasoningUseCase;
         this.resetChatUseCase = resetChatUseCase;
+        this.startCodingTaskUseCase = startCodingTaskUseCase;
+        this.listCodingTasksUseCase = listCodingTasksUseCase;
         this.objectMapper = objectMapper;
     }
 
@@ -73,6 +81,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         var snapshot = this.connectToChatUseCase.connect(chatId);
         this.broadcaster.sendReplayTo(session, snapshot);
+        // Depois do histórico, o estado das tarefas do agente de codificação desta conversa.
+        this.broadcaster.sendCodingTasksTo(session, this.listCodingTasksUseCase.list(chatId));
     }
 
     @Override
@@ -93,6 +103,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         case "context" -> this.addContextUseCase.addContext(chatId, incoming.contentOrEmpty());
         case "interrupt" -> this.interruptReasoningUseCase.interrupt(chatId);
         case "reset" -> this.resetChatUseCase.reset(chatId);
+        case "coding_task" -> this.startCodingTaskUseCase.start(chatId, incoming.contentOrEmpty());
         default -> log.warn("[{}] mensagem desconhecida: {}", chatId, incoming.type());
         }
     }

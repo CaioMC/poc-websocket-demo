@@ -18,6 +18,7 @@ Vite**.
 - [Objetivo do projeto](#objetivo-do-projeto)
 - [Funcionalidades](#funcionalidades)
 - [Como funciona (diagrama de sequência)](#como-funciona-diagrama-de-sequência)
+- [Agente de codificação: do chat ao pull request](#agente-de-codificação-do-chat-ao-pull-request)
 - [Tecnologias e técnicas utilizadas](#tecnologias-e-técnicas-utilizadas)
 - [Arquitetura em um relance](#arquitetura-em-um-relance)
 - [Como rodar](#como-rodar)
@@ -69,6 +70,9 @@ depois virou a interface React do topo deste README.
    conversa — o servidor devolve o histórico completo e o status atual,
    incluindo o que foi processado enquanto você estava offline.
 6. **Reset**: zera o histórico e o status da conversa no servidor.
+7. **Agente de codificação**: `/codificar <o que implementar>` abre uma issue no GitHub
+   com o pedido e o contexto da conversa, dispara um agente no GitHub Actions e devolve
+   no chat o link do pull request em rascunho, os arquivos alterados e o resultado dos testes.
 
 ## Como funciona (diagrama de sequência)
 
@@ -116,6 +120,38 @@ Esse é 1 dos 6 fluxos documentados. Os outros 5 — **conectar/reconectar**,
 **parar a geração**, **substituir a rodada em andamento**, **contexto
 adicional** e **reset** — estão, cada um em seu próprio diagrama, em
 [`docs/sequence-diagram.md`](docs/sequence-diagram.md).
+
+## Agente de codificação: do chat ao pull request
+
+O chat também funciona como **gatilho** de um agente de codificação. Escreva no chat:
+
+```
+/codificar Criar endpoint GET /api/health que responde {"status":"UP"}
+- [ ] responde HTTP 200
+- [ ] tem teste unitário
+```
+
+e o assistente:
+
+1. abre uma **issue** no GitHub com o seu pedido e as últimas mensagens da conversa;
+2. dispara o workflow **coding-agent** no GitHub Actions, que roda o agente
+   ([`CaioMC/coding-agent`](https://github.com/CaioMC/coding-agent)) num container isolado;
+3. acompanha a execução e, quando termina, avisa no chat com o **link do PR em rascunho**,
+   os arquivos alterados e o resultado da verificação.
+
+```mermaid
+flowchart LR
+    C["Chat<br/>/codificar"] --> I["Issue<br/>no GitHub"]
+    I --> W["GitHub Actions<br/>agente codifica e testa"]
+    W --> P["PR em rascunho"]
+    P --> H["Você revisa"]
+    W -. "resultado" .-> C
+```
+
+O assistente nunca faz push: ele só abre a issue e dispara o workflow. Quem escreve no
+repositório é o workflow, com um token que vale só para aquela execução. O guia completo,
+com diagramas, segurança e configuração passo a passo, está em
+[`docs/coding-agent.md`](docs/coding-agent.md).
 
 ## Tecnologias e técnicas utilizadas
 
@@ -185,6 +221,9 @@ Abra **http://localhost:3000**.
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | URL do servidor Ollama |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:0.5b` | Modelo usado para o chat |
 | `WEBSOCKET_ALLOWED_ORIGINS` | `*` | Origens permitidas no handshake WS |
+| `CODING_AGENT_GITHUB_TOKEN` | (vazio) | Token fine-grained do GitHub para o `/codificar` (Issues e Actions: read/write) |
+| `CODING_AGENT_REPOSITORY` | `CaioMC/poc-websocket-demo` | Repositório onde a issue é aberta e o agente trabalha |
+| `CODING_AGENT_BASE_BRANCH` | `main` | Branch base das tarefas do agente |
 
 ## Roteiro de teste sugerido
 
@@ -203,6 +242,10 @@ Abra **http://localhost:3000**.
    conversa), o histórico completo reaparece, incluindo o que foi gerado
    enquanto a aba estava fechada.
 6. Use **Reiniciar** para zerar a conversa e testar tudo de novo.
+7. Com `CODING_AGENT_GITHUB_TOKEN` configurado, mande
+   `/codificar Criar endpoint GET /api/health` e acompanhe o cartão da tarefa: issue
+   criada, agente trabalhando no GitHub Actions e, no fim, o link do PR em rascunho
+   (ver [`docs/coding-agent.md`](docs/coding-agent.md#8-configuração-passo-a-passo)).
 
 ## Testes automatizados
 
@@ -227,7 +270,9 @@ Ollama estar rodando.
     │   │   ├── domain/                # Chat, ChatMessage, ChatStatus, ChatRole, ChatSnapshot
     │   │   ├── usecase/                # um caso de uso por interface
     │   │   └── application/            # implementações + ChatReasoningRunner
-    │   └── adapters/chat/             # WebSocket, Ollama, persistência em memória
+    │   ├── core/codingtask/           # gatilho do agente de codificação (issue + workflow)
+    │   ├── adapters/chat/             # WebSocket, Ollama, persistência em memória
+    │   └── adapters/codingtask/       # GitHub, agendador de acompanhamento, config
     └── resources/
         ├── application.yaml
         └── static/index.html          # fallback simples se a UI React não foi buildada
@@ -258,3 +303,4 @@ produção (autenticação, persistência durável, rate limiting etc.).
 | [`docs/sequence-diagram.md`](docs/sequence-diagram.md) | Os 6 fluxos, um diagrama de sequência por fluxo |
 | [`docs/websocket-explained.md`](docs/websocket-explained.md) | Guia didático: por que WebSocket, protocolo, streaming, reconexão |
 | [`docs/dependencies.md`](docs/dependencies.md) | Cada dependência de backend/frontend e por que foi escolhida |
+| [`docs/coding-agent.md`](docs/coding-agent.md) | Agente de codificação: do `/codificar` ao PR, com diagramas e configuração |
