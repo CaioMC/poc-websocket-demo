@@ -31,7 +31,7 @@ app:
     github:
       api-url: https://api.github.com
       # Token fine-grained: Issues (read/write), Actions (read/write), Metadata (read).
-      token: ${CODING_AGENT_GITHUB_TOKEN:}
+      token: ${CODING_AGENT_GITHUB_TOKEN}
 
 logging:
   level:
