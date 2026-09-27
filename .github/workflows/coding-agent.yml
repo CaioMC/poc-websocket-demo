@@ -44,7 +44,9 @@ jobs:
   agent:
     uses: CaioMC/coding-agent/.github/workflows/agent.yml@main
     with:
-      issue_number: ${{ inputs.issue_number }}
+      # Pela API o dispatch sempre entrega os inputs como string ("4"); o workflow
+      # reutilizável declara type: number, então é preciso converter.
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
       request_id: ${{ inputs.request_id }}
       base_branch: ${{ inputs.base_branch }}
       work_branch: ${{ inputs.work_branch }}
