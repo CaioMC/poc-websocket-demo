@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChatHeader } from './components/ChatHeader';
+import { CodingTaskList } from './components/CodingTaskList';
 import { Composer } from './components/Composer';
 import { ErrorBanner } from './components/ErrorBanner';
 import { MessageList } from './components/MessageList';
@@ -9,8 +10,19 @@ import { loadConversationId, saveConversationId } from './utils/conversationId';
 
 export function App() {
   const [conversationId, setConversationId] = useState(loadConversationId);
-  const { connectionState, status, messages, streamingContent, errorMessage, sendMessage, sendContext, interrupt, reset } =
-    useChat(conversationId);
+  const {
+    connectionState,
+    status,
+    messages,
+    streamingContent,
+    errorMessage,
+    codingTasks,
+    sendMessage,
+    startCodingTask,
+    sendContext,
+    interrupt,
+    reset,
+  } = useChat(conversationId);
 
   const hasStreamingContent = Boolean(streamingContent);
   const elapsedSeconds = useElapsedSeconds(status === 'PROCESSING');
@@ -44,11 +56,13 @@ export function App() {
 
       <footer className="chat-footer">
         {errorMessage && <ErrorBanner message={errorMessage} />}
+        <CodingTaskList tasks={codingTasks} />
         <Composer
           status={status}
           connectionState={connectionState}
           onSendMessage={sendMessage}
           onSendContext={sendContext}
+          onStartCodingTask={startCodingTask}
           onInterrupt={interrupt}
         />
       </footer>

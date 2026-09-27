@@ -17,6 +17,22 @@ app:
     # Em produção, restrinja para os domínios reais do front-end (ex.: https://*.seudominio.com).
     allowed-origin-patterns: ${WEBSOCKET_ALLOWED_ORIGINS:*}
 
+  # Gatilho do agente de codificação (comando /codificar no chat). Ver docs/coding-agent.md.
+  coding-agent:
+    # Repositório onde a issue é aberta e o workflow coding-agent.yml roda (owner/repo).
+    repository: ${CODING_AGENT_REPOSITORY:CaioMC/poc-websocket-demo}
+    base-branch: ${CODING_AGENT_BASE_BRANCH:main}
+    workflow-file: coding-agent.yml
+    # De quanto em quanto tempo o servidor consulta o GitHub (só quando há tarefa ativa).
+    poll-interval-ms: 15000
+    dispatch-timeout: 10m
+    # Mensagens recentes da conversa copiadas para a issue como contexto.
+    context-messages: 6
+    github:
+      api-url: https://api.github.com
+      # Token fine-grained: Issues (read/write), Actions (read/write), Metadata (read).
+      token: ${CODING_AGENT_GITHUB_TOKEN:}
+
 logging:
   level:
     com.example.wschat: INFO

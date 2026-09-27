@@ -51,12 +51,26 @@ com.example.wschat/
 │       ├── AddContextService, InterruptReasoningService, ResetChatService
 │       └── ChatReasoningRunner              # orquestração compartilhada do streaming
 │
+├── core/codingtask/                        # gatilho do agente de codificação (ver coding-agent.md)
+│   ├── domain/                             # CodingTask, CodingTaskStatus, CodingTaskResult
+│   │   ├── agent/CodingAgentPort.java       # porta: abrir tarefa, disparar, acompanhar
+│   │   ├── repository/CodingTaskRepository.java
+│   │   └── event/CodingTaskEventPublisher.java
+│   ├── usecase/                            # StartCodingTask, TrackCodingTasks, ListCodingTasks
+│   └── application/                        # serviços + CodingTaskChatNotifier (mensagens no chat)
+│
+├── adapters/codingtask/
+│   ├── github/GitHubCodingAgentAdapter      # REST API do GitHub (issue, workflow, artefato)
+│   ├── scheduling/CodingTaskProgressPoller  # consulta periódica das tarefas ativas
+│   ├── persistence/InMemoryCodingTaskRepository
+│   └── config/                              # CodingAgentProperties (app.coding-agent.*)
+│
 └── adapters/chat/                          # infraestrutura — depende do core, nunca o contrário
     ├── websocket/
     │   ├── ChatWebSocketConfig, ChatWebSocketHandler
     │   ├── session/ChatSessionRegistry      # sessões abertas por ChatId
     │   ├── event/ChatWebSocketEventBroadcaster
-    │   └── dto/                             # IncomingChatMessage, OutgoingChatEvent, ChatMessageView
+    │   └── dto/                             # IncomingChatMessage, OutgoingChatEvent, ChatMessageView, CodingTaskView
     ├── ai/OllamaReasoningModelAdapter.java  # implementa ReasoningModelPort
     └── persistence/InMemoryChatRepository.java
 
@@ -72,6 +86,13 @@ Fluxo de dependência, sem ciclos: `adapters → core.usecase → core.applicati
 | `ChatRepository` | Persistir/recuperar o estado de um chat | `InMemoryChatRepository` |
 | `ReasoningModelPort` | Resposta do modelo, em streaming | `OllamaReasoningModelAdapter` (Spring AI) |
 | `ChatEventPublisher` | Notificar mudanças/mensagens ao mundo externo | `ChatWebSocketEventBroadcaster` |
+| `CodingAgentPort` | Abrir a tarefa, disparar e acompanhar o agente de codificação | `GitHubCodingAgentAdapter` (issue + GitHub Actions) |
+| `CodingTaskRepository` | Persistir as tarefas de codificação | `InMemoryCodingTaskRepository` |
+| `CodingTaskEventPublisher` | Avisar a interface que uma tarefa mudou | `ChatWebSocketEventBroadcaster` (o mesmo adapter do chat) |
+
+As três últimas portas pertencem ao contexto `codingtask`, o gatilho do agente de
+codificação. O desenho completo, com diagramas, está em
+[`coding-agent.md`](coding-agent.md).
 
 ## 4. Spring AI + Ollama
 
@@ -93,10 +114,13 @@ Endpoint: `ws://<host>:3000/ws/chat?conversationId=<id>`. Ver
 [`websocket-explained.md`](websocket-explained.md#4-o-protocolo-um-envelope-um-campo-type)
 para a explicação completa; resumo dos tipos de mensagem:
 
-**Cliente → servidor**: `user_message`, `context`, `interrupt`, `reset`.
+**Cliente → servidor**: `user_message`, `context`, `interrupt`, `reset`,
+`coding_task` (pedido ao agente de codificação, enviado pelo comando `/codificar`).
 
 **Servidor → cliente**: `replay`, `message_appended`, `status_changed`,
-`reasoning_chunk`, `reasoning_completed`, `reasoning_interrupted`, `error`.
+`reasoning_chunk`, `reasoning_completed`, `reasoning_interrupted`, `error`,
+`coding_task_updated` (estado completo de uma tarefa do agente; também enviado
+logo depois do `replay`, ao conectar).
 
 `reasoning_completed` é sempre o último evento de uma rodada bem-sucedida —
 o cliente pode parar de escutar com segurança ao recebê-lo.
