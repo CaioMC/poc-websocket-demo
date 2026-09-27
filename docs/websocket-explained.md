@@ -85,6 +85,17 @@ servidor→cliente usam um **envelope único** com um campo discriminador
 {"type": "status_changed", "status": "PROCESSING"}
 ```
 
+O agente de codificação entrou no protocolo do mesmo jeito, com um tipo novo em cada
+direção, sem mudar nada do que já existia:
+
+```json
+// cliente → servidor: o texto depois de /codificar
+{"type": "coding_task", "content": "Criar endpoint GET /api/health"}
+
+// servidor → cliente: estado completo da tarefa a cada mudança
+{"type": "coding_task_updated", "codingTask": {"id": "b95e5b38", "status": "RUNNING", "issueNumber": 12, "...": "..."}}
+```
+
 Vantagem prática: o cliente faz `JSON.parse` + `switch (event.type)` — sem
 hierarquia de classes, sem `instanceof`. Do lado do backend, dois `record`s
 cobrem tudo (`IncomingChatMessage`, `OutgoingChatEvent`), cada evento

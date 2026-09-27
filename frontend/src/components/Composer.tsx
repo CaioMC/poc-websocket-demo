@@ -1,18 +1,20 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 import type { ChatStatus, ConnectionState } from '../types/chat';
+import { CODING_COMMAND, parseCodingCommand } from '../utils/codingCommand';
 
 interface ComposerProps {
   status: ChatStatus;
   connectionState: ConnectionState;
   onSendMessage: (content: string) => void;
   onSendContext: (content: string) => void;
+  onStartCodingTask: (request: string) => void;
   onInterrupt: () => void;
 }
 
 const MAX_TEXTAREA_HEIGHT_PX = 160;
 
-export function Composer({ status, connectionState, onSendMessage, onSendContext, onInterrupt }: ComposerProps) {
+export function Composer({ status, connectionState, onSendMessage, onSendContext, onStartCodingTask, onInterrupt }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -20,9 +22,13 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
   const isProcessing = status === 'PROCESSING';
   const canConnect = connectionState === 'open';
   const hasText = value.trim().length > 0;
+  const codingRequest = parseCodingCommand(value);
+  const isCodingCommand = codingRequest !== null;
 
   // Vira "parar" enquanto processa; digitar volta a mostrar "enviar" (interrompe e substitui).
   const showStopButton = isProcessing && !hasText;
+  // "/codificar" sozinho não basta: é preciso dizer o que implementar.
+  const canSubmit = hasText && (!isCodingCommand || codingRequest.length > 0);
 
   const resizeTextarea = () => {
     const el = textareaRef.current;
@@ -38,8 +44,11 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
 
   const submit = () => {
     const trimmed = value.trim();
-    if (!trimmed || !canConnect) return;
-    if (isWaitingForContext) {
+    if (!trimmed || !canConnect || !canSubmit) return;
+    if (codingRequest) {
+      // Não vai para o LLM do chat: vira uma issue + workflow do agente de codificação.
+      onStartCodingTask(codingRequest);
+    } else if (isWaitingForContext) {
       onSendContext(trimmed);
     } else {
       onSendMessage(trimmed);
@@ -60,7 +69,7 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      if (hasText) {
+      if (canSubmit) {
         submit();
       }
     }
@@ -83,7 +92,7 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
               ? 'Conectando ao servidor…'
               : isWaitingForContext
                 ? 'Digite o contexto solicitado…'
-                : 'Envie uma mensagem…'
+                : `Envie uma mensagem ou ${CODING_COMMAND} <o que implementar>…`
           }
           value={value}
           onChange={handleChange}
@@ -94,7 +103,7 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
         <button
           type="submit"
           className={`composer__submit ${showStopButton ? 'composer__submit--stop' : ''}`}
-          disabled={!canConnect || (!showStopButton && !hasText)}
+          disabled={!canConnect || (!showStopButton && !canSubmit)}
           aria-label={showStopButton ? 'Parar geração' : 'Enviar mensagem'}
           title={showStopButton ? 'Parar geração' : 'Enviar mensagem'}
         >
@@ -102,8 +111,15 @@ export function Composer({ status, connectionState, onSendMessage, onSendContext
         </button>
       </div>
 
-      {isProcessing && hasText && (
-        <p className="composer__hint">Enviar agora interrompe a resposta em andamento e inicia uma nova.</p>
+      {isCodingCommand ? (
+        <p className="composer__hint composer__hint--coding">
+          {codingRequest
+            ? 'Vai abrir uma issue no GitHub com este pedido e o contexto da conversa, e disparar o agente de codificação.'
+            : `Descreva a tarefa depois de ${CODING_COMMAND}. Ex.: ${CODING_COMMAND} Criar endpoint GET /api/health`}
+        </p>
+      ) : (
+        isProcessing &&
+        hasText && <p className="composer__hint">Enviar agora interrompe a resposta em andamento e inicia uma nova.</p>
       )}
     </form>
   );

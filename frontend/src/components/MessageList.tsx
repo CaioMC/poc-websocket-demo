@@ -27,6 +27,10 @@ export function MessageList({ messages, streamingContent, status, elapsedSeconds
           </span>
           <h2>Comece uma conversa</h2>
           <p>Pergunte algo como “Qual a validade de uma banana média?” e acompanhe a resposta chegando em tempo real.</p>
+          <p>
+            Para pedir código, use <code>/codificar</code>: por exemplo, <code>/codificar Criar endpoint GET /api/health</code>.
+            O assistente abre uma issue no GitHub e o agente de codificação devolve um pull request.
+          </p>
         </div>
       </div>
     );

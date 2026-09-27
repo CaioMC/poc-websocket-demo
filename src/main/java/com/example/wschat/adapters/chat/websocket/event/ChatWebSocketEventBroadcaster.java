@@ -1,6 +1,7 @@
 package com.example.wschat.adapters.chat.websocket.event;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.web.socket.WebSocketSession;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.example.wschat.adapters.chat.websocket.dto.ChatMessageView;
+import com.example.wschat.adapters.chat.websocket.dto.CodingTaskView;
 import com.example.wschat.adapters.chat.websocket.dto.OutgoingChatEvent;
 import com.example.wschat.adapters.chat.websocket.session.ChatSessionRegistry;
 import com.example.wschat.core.chat.domain.ChatId;
@@ -18,10 +20,16 @@ import com.example.wschat.core.chat.domain.ChatMessage;
 import com.example.wschat.core.chat.domain.ChatSnapshot;
 import com.example.wschat.core.chat.domain.ChatStatus;
 import com.example.wschat.core.chat.domain.event.ChatEventPublisher;
+import com.example.wschat.core.codingtask.domain.CodingTask;
+import com.example.wschat.core.codingtask.domain.event.CodingTaskEventPublisher;
 
-/** Implementação de {@link ChatEventPublisher}: serializa eventos do core para JSON e envia via WebSocket. */
+/**
+ * Implementação de {@link ChatEventPublisher} e de {@link CodingTaskEventPublisher}:
+ * serializa eventos do core para JSON e envia via WebSocket. Um único adapter de saída
+ * atende as duas portas, porque o canal (as sessões da conversa) é o mesmo.
+ */
 @Component
-public class ChatWebSocketEventBroadcaster implements ChatEventPublisher {
+public class ChatWebSocketEventBroadcaster implements ChatEventPublisher, CodingTaskEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketEventBroadcaster.class);
 
@@ -61,6 +69,16 @@ public class ChatWebSocketEventBroadcaster implements ChatEventPublisher {
     @Override
     public void publishError(ChatId chatId, String errorMessage) {
         broadcast(chatId, OutgoingChatEvent.error(errorMessage));
+    }
+
+    @Override
+    public void publishTaskUpdated(CodingTask task) {
+        broadcast(task.chatId(), OutgoingChatEvent.codingTaskUpdated(CodingTaskView.from(task)));
+    }
+
+    /** Envia o estado das tarefas de codificação só à sessão que acabou de (re)conectar. */
+    public void sendCodingTasksTo(WebSocketSession session, List<CodingTask> tasks) {
+        tasks.forEach(task -> send(session, OutgoingChatEvent.codingTaskUpdated(CodingTaskView.from(task))));
     }
 
     /** Envia o histórico + status atual só à sessão que acabou de (re)conectar. */
