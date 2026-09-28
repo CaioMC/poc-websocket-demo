@@ -10,6 +10,11 @@ O código do agente fica em outro repositório, o
 [`coding-agent`](https://github.com/CaioMC/coding-agent). Este documento cobre o lado do
 assistente e como as duas partes se encaixam.
 
+> 📖 **Quer ver cada chamada?** O [`coding-agent-flow.md`](coding-agent-flow.md) acompanha uma
+> tarefa do começo ao fim, com um diagrama por etapa: a criação da issue, o disparo, o
+> workflow que chama o workflow reutilizável, o laço do agente, a publicação do PR, o
+> acompanhamento e um mapa de onde cada erro acontece.
+
 ## Índice
 
 1. [A ideia em uma frase](#1-a-ideia-em-uma-frase)
@@ -254,8 +259,12 @@ agente: é pequeno demais para seguir um laço de ferramentas.
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
 | "token do GitHub não configurado" no chat | Falta `CODING_AGENT_GITHUB_TOKEN` | Exporte a variável e reinicie o assistente |
-| HTTP 404 ao disparar | Workflow não existe na branch base, ou o token não tem acesso ao repositório | Confira `.github/workflows/coding-agent.yml` na `main` e o acesso do token |
-| HTTP 403 ao disparar | Token sem permissão de Actions | Dê **Actions: Read and write** ao token |
+| HTTP 403 "Resource not accessible by personal access token" ao criar a issue | Token sem **Issues: Read and write** ou sem acesso ao repositório | Edite o token (passo 3) |
+| HTTP 404 ao disparar | Workflow não existe na `main` (o GitHub só registra workflows da branch padrão), ou o token não tem **Actions: Read and write** | Faça merge do `coding-agent.yml` na `main` e confira o token |
+| Run falha em segundos, sem jobs, com `Unexpected value '4'` | Os inputs do dispatch chegam como texto e o workflow reutilizável espera número | Use `fromJSON(inputs.issue_number)` no `coding-agent.yml` da `main` |
 | Tarefa falha com "a execução não apareceu" | Workflow desativado ou nome do arquivo diferente | Ative o workflow em *Actions* e confira `app.coding-agent.workflow-file` |
 | Workflow falha ao criar o PR | Actions sem permissão de abrir PR | Passo 2 da configuração |
 | Agente termina `INCOMPLETE` ou `BUDGET_EXCEEDED` | Modelo pequeno ou tarefa grande | Use um modelo maior, quebre a tarefa, melhore o `AGENTS.md` |
+
+O passo a passo de cada erro, com o diagrama de onde ele acontece, está na
+[seção 13 do `coding-agent-flow.md`](coding-agent-flow.md#13-onde-cada-erro-acontece-e-como-resolver).

@@ -152,6 +152,8 @@ O assistente nunca faz push: ele só abre a issue e dispara o workflow. Quem esc
 repositório é o workflow, com um token que vale só para aquela execução. O guia completo,
 com diagramas, segurança e configuração passo a passo, está em
 [`docs/coding-agent.md`](docs/coding-agent.md).
+O fluxo detalhado, com um diagrama por etapa (inclusive a pipeline do repositório que
+dispara a pipeline do agente), está em [`docs/coding-agent-flow.md`](docs/coding-agent-flow.md).
 
 ## Tecnologias e técnicas utilizadas
 
@@ -304,3 +306,4 @@ produção (autenticação, persistência durável, rate limiting etc.).
 | [`docs/websocket-explained.md`](docs/websocket-explained.md) | Guia didático: por que WebSocket, protocolo, streaming, reconexão |
 | [`docs/dependencies.md`](docs/dependencies.md) | Cada dependência de backend/frontend e por que foi escolhida |
 | [`docs/coding-agent.md`](docs/coding-agent.md) | Agente de codificação: do `/codificar` ao PR, com diagramas e configuração |
+| [`docs/coding-agent-flow.md`](docs/coding-agent-flow.md) | O fluxo completo do agente, chamada por chamada: issue, disparo, workflow que chama workflow, laço do agente, PR, acompanhamento e onde cada erro acontece |
